@@ -1,0 +1,32 @@
+[build]
+builder = "nixpacks"
+
+[deploy]
+healthcheckPath = "/health"
+healthcheckTimeout = 300
+restartPolicyType = "ON_FAILURE"
+
+[env]
+PYTHONPATH = "/app/backend"
+PORT = "8000"
+
+[[services]]
+name = "backend"
+source = "backend/"
+domains = ["mergertracker-api.up.railway.app"]
+
+[services.env]
+ENVIRONMENT = "production"
+DATABASE_URL = "${{DATABASE_URL}}"
+REDIS_URL = "${{REDIS_URL}}"
+CLAUDE_API_KEY = "${{CLAUDE_API_KEY}}"
+SECRET_KEY = "${{SECRET_KEY}}"
+
+[[services]]
+name = "frontend"
+source = "frontend/"
+domains = ["mergertracker.up.railway.app"]
+
+[services.build]
+buildCommand = "npm install && npm run build"
+startCommand = "npx serve -s build -p $PORT"
