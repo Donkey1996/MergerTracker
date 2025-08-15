@@ -25,7 +25,7 @@ export enum PaymentMethod {
   DEBT_ASSUMPTION = 'debt_assumption',
 }
 
-export interface Company {
+export interface DealCompany {
   company_id: string;
   company_name: string;
   ticker_symbol?: string;
@@ -42,8 +42,8 @@ export interface Company {
 
 export interface DealParticipant {
   participant_id: string;
-  target_company?: Company;
-  acquirer_company?: Company;
+  target_company?: DealCompany;
+  acquirer_company?: DealCompany;
   ownership_percentage?: number;
   participation_type: string;
   created_at: string;

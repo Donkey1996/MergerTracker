@@ -1,4 +1,4 @@
-import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
+import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse, InternalAxiosRequestConfig } from 'axios';
 
 // API configuration
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
@@ -14,7 +14,7 @@ const apiClient: AxiosInstance = axios.create({
 
 // Request interceptor for authentication
 apiClient.interceptors.request.use(
-  (config: AxiosRequestConfig) => {
+  (config: InternalAxiosRequestConfig) => {
     // Add auth token if available
     const token = localStorage.getItem('access_token');
     if (token && config.headers) {
@@ -69,6 +69,19 @@ export const api = {
     
   delete: <T = any>(url: string, config?: AxiosRequestConfig): Promise<AxiosResponse<T>> =>
     apiClient.delete<T>(url, config),
+};
+
+// Export API service and token management functions
+export const apiService = api;
+
+export const setTokens = (accessToken: string, refreshToken: string) => {
+  localStorage.setItem('access_token', accessToken);
+  localStorage.setItem('refresh_token', refreshToken);
+};
+
+export const clearTokens = () => {
+  localStorage.removeItem('access_token');
+  localStorage.removeItem('refresh_token');
 };
 
 export default apiClient;

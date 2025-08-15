@@ -10,10 +10,10 @@ import {
   useTheme,
 } from '@mui/material';
 import {
-  TwitterIcon,
-  LinkedInIcon,
-  GitHubIcon,
-  EmailIcon,
+  Twitter as TwitterIcon,
+  LinkedIn as LinkedInIcon,
+  GitHub as GitHubIcon,
+  Email as EmailIcon,
 } from '@mui/icons-material';
 
 const Footer: React.FC = () => {
