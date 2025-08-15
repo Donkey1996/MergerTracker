@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>MergerTracker Connection Test</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            max-width: 800px; 
+            margin: 50px auto; 
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .status { 
+            padding: 10px; 
+            border-radius: 5px; 
+            margin: 10px 0; 
+        }
+        .success { 
+            background-color: #d4edda; 
+            color: #155724; 
+            border: 1px solid #c3e6cb;
+        }
+        .error { 
+            background-color: #f8d7da; 
+            color: #721c24; 
+            border: 1px solid #f5c6cb;
+        }
+        .loading { 
+            background-color: #d1ecf1; 
+            color: #0c5460; 
+            border: 1px solid #bee5eb;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        pre {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .endpoint-test {
+            border: 1px solid #ddd;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 MergerTracker Connection Test</h1>
+        <p>Testing connection between frontend and backend services.</p>
+        
+        <div class="endpoint-test">
+            <h3>Backend Health Check</h3>
+            <button onclick="testHealth()">Test Health Endpoint</button>
+            <div id="health-status"></div>
+            <pre id="health-result"></pre>
+        </div>
+
+        <div class="endpoint-test">
+            <h3>Deals API</h3>
+            <button onclick="testDeals()">Test Deals Endpoint</button>
+            <div id="deals-status"></div>
+            <pre id="deals-result"></pre>
+        </div>
+
+        <div class="endpoint-test">
+            <h3>Analytics API</h3>
+            <button onclick="testAnalytics()">Test Analytics Endpoint</button>
+            <div id="analytics-status"></div>
+            <pre id="analytics-result"></pre>
+        </div>
+
+        <div class="endpoint-test">
+            <h3>Search API</h3>
+            <button onclick="testSearch()">Search for "tech"</button>
+            <div id="search-status"></div>
+            <pre id="search-result"></pre>
+        </div>
+
+        <div class="endpoint-test">
+            <h3>Create Deal API</h3>
+            <button onclick="testCreate()">Create Test Deal</button>
+            <div id="create-status"></div>
+            <pre id="create-result"></pre>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8000';
+
+        function setStatus(elementId, message, type) {
+            const element = document.getElementById(elementId);
+            element.innerHTML = message;
+            element.className = `status ${type}`;
+        }
+
+        function setResult(elementId, data) {
+            document.getElementById(elementId).textContent = JSON.stringify(data, null, 2);
+        }
+
+        async function testEndpoint(url, options = {}) {
+            try {
+                const response = await fetch(url, {
+                    ...options,
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...options.headers
+                    }
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const data = await response.json();
+                return { success: true, data };
+            } catch (error) {
+                return { success: false, error: error.message };
+            }
+        }
+
+        async function testHealth() {
+            setStatus('health-status', 'Testing health endpoint...', 'loading');
+            setResult('health-result', '');
+            
+            const result = await testEndpoint(`${API_BASE}/health`);
+            
+            if (result.success) {
+                setStatus('health-status', '✅ Health check successful!', 'success');
+                setResult('health-result', result.data);
+            } else {
+                setStatus('health-status', `❌ Health check failed: ${result.error}`, 'error');
+                setResult('health-result', { error: result.error });
+            }
+        }
+
+        async function testDeals() {
+            setStatus('deals-status', 'Testing deals endpoint...', 'loading');
+            setResult('deals-result', '');
+            
+            const result = await testEndpoint(`${API_BASE}/api/v1/deals`);
+            
+            if (result.success) {
+                setStatus('deals-status', `✅ Found ${result.data.length} deals!`, 'success');
+                setResult('deals-result', result.data);
+            } else {
+                setStatus('deals-status', `❌ Deals test failed: ${result.error}`, 'error');
+                setResult('deals-result', { error: result.error });
+            }
+        }
+
+        async function testAnalytics() {
+            setStatus('analytics-status', 'Testing analytics endpoint...', 'loading');
+            setResult('analytics-result', '');
+            
+            const result = await testEndpoint(`${API_BASE}/api/v1/analytics/summary`);
+            
+            if (result.success) {
+                const summary = result.data.summary;
+                setStatus('analytics-status', `✅ Analytics: ${summary.total_deals} deals, $${(summary.total_value/1e9).toFixed(1)}B total value`, 'success');
+                setResult('analytics-result', result.data);
+            } else {
+                setStatus('analytics-status', `❌ Analytics test failed: ${result.error}`, 'error');
+                setResult('analytics-result', { error: result.error });
+            }
+        }
+
+        async function testSearch() {
+            setStatus('search-status', 'Testing search endpoint...', 'loading');
+            setResult('search-result', '');
+            
+            const result = await testEndpoint(`${API_BASE}/api/v1/search/deals?q=tech`);
+            
+            if (result.success) {
+                setStatus('search-status', `✅ Search found ${result.data.length} results for "tech"`, 'success');
+                setResult('search-result', result.data);
+            } else {
+                setStatus('search-status', `❌ Search test failed: ${result.error}`, 'error');
+                setResult('search-result', { error: result.error });
+            }
+        }
+
+        async function testCreate() {
+            setStatus('create-status', 'Testing create deal endpoint...', 'loading');
+            setResult('create-result', '');
+            
+            const testDeal = {
+                deal_id: `test_deal_${Date.now()}`,
+                deal_type: "acquisition",
+                target_company: "Test Target Inc",
+                acquirer_company: "Test Acquirer Corp",
+                deal_value: 500000000,
+                deal_value_currency: "USD",
+                industry_sector: "technology",
+                deal_status: "announced",
+                announcement_date: "2025-01-15"
+            };
+            
+            const result = await testEndpoint(`${API_BASE}/api/v1/deals`, {
+                method: 'POST',
+                body: JSON.stringify(testDeal)
+            });
+            
+            if (result.success) {
+                setStatus('create-status', '✅ Successfully created test deal!', 'success');
+                setResult('create-result', result.data);
+            } else {
+                setStatus('create-status', `❌ Create test failed: ${result.error}`, 'error');
+                setResult('create-result', { error: result.error });
+            }
+        }
+
+        // Auto-run health check on page load
+        window.onload = function() {
+            testHealth();
+        };
+    </script>
+</body>
+</html>

@@ -7,6 +7,8 @@ from contextlib import asynccontextmanager
 from api.routes import api_router
 from config.settings import settings
 from config.database import init_db
+from services.database_service import initialize_database_service, shutdown_database_service
+from services.scheduler_service import initialize_scheduler_service, shutdown_scheduler_service
 
 # Configure structured logging
 structlog.configure(
@@ -34,10 +36,38 @@ async def lifespan(app: FastAPI):
     """Application lifespan events"""
     # Startup
     logger.info("Starting MergerTracker API", environment=settings.ENVIRONMENT)
-    await init_db()
+    
+    # Initialize database services
+    try:
+        await init_db()
+        await initialize_database_service()
+        logger.info("Database services initialized successfully")
+    except Exception as e:
+        logger.error("Failed to initialize database services", error=str(e))
+        raise
+    
+    # Initialize scheduler service
+    try:
+        await initialize_scheduler_service()
+        logger.info("Scheduler service initialized successfully")
+    except Exception as e:
+        logger.error("Failed to initialize scheduler service", error=str(e))
+        # Scheduler failure shouldn't prevent API startup
+    
+    logger.info("MergerTracker API startup completed")
+    
     yield
+    
     # Shutdown
     logger.info("Shutting down MergerTracker API")
+    
+    # Shutdown services
+    try:
+        await shutdown_scheduler_service()
+        await shutdown_database_service()
+        logger.info("All services shut down successfully")
+    except Exception as e:
+        logger.error("Error during service shutdown", error=str(e))
 
 
 # Create FastAPI application
@@ -73,12 +103,45 @@ app.include_router(api_router, prefix="/api/v1")
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""
-    return {
-        "status": "healthy",
-        "service": "MergerTracker API",
-        "version": "1.0.0",
-        "environment": settings.ENVIRONMENT
-    }
+    try:
+        # Check database service
+        from services.database_service import get_database_service
+        db_service = await get_database_service()
+        db_health = await db_service.health_check()
+        
+        # Check scheduler service
+        from services.scheduler_service import get_scheduler_service
+        scheduler_service = await get_scheduler_service()
+        scheduler_health = {
+            'status': 'healthy' if scheduler_service._running else 'stopped',
+            'active_jobs': len(await scheduler_service.list_jobs())
+        }
+        
+        overall_status = "healthy" if (
+            db_health.get('status') == 'healthy' and 
+            scheduler_health.get('status') == 'healthy'
+        ) else "degraded"
+        
+        return {
+            "status": overall_status,
+            "service": "MergerTracker API",
+            "version": "1.0.0",
+            "environment": settings.ENVIRONMENT,
+            "services": {
+                "database": db_health,
+                "scheduler": scheduler_health
+            }
+        }
+        
+    except Exception as e:
+        logger.error("Health check failed", error=str(e))
+        return {
+            "status": "unhealthy",
+            "service": "MergerTracker API",
+            "version": "1.0.0",
+            "environment": settings.ENVIRONMENT,
+            "error": str(e)
+        }
 
 
 @app.get("/")
