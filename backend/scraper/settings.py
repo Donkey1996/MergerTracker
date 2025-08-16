@@ -28,13 +28,16 @@ USER_AGENT = 'mergertracker (+http://www.mergertracker.com)'
 ITEM_PIPELINES = {
     'scraper.pipelines.ValidationPipeline': 300,
     'scraper.pipelines.DuplicatesPipeline': 400,
+    'scraper.pipelines.DataEnrichmentPipeline': 450,
     'scraper.pipelines.DatabasePipeline': 500,
 }
 
 # Configure middlewares
 DOWNLOADER_MIDDLEWARES = {
     'scraper.middlewares.RotateUserAgentMiddleware': 400,
+    'scraper.middlewares.BloombergAntiDetectionMiddleware': 405,
     'scraper.middlewares.ProxyMiddleware': 410,
+    'scraper.middlewares.RateLimitMiddleware': 500,
     'scrapy_playwright.middleware.ScrapyPlaywrightMiddleware': 585,
 }
 

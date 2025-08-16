@@ -157,3 +157,230 @@ class RobotsTxtMiddleware:
             request.meta['download_delay'] = crawl_delay
         
         return None
+
+
+class BloombergAntiDetectionMiddleware:
+    """
+    Specialized middleware for Bloomberg scraping with advanced anti-detection.
+    
+    This middleware implements multiple strategies to avoid detection:
+    - Advanced user agent rotation with realistic browser fingerprints
+    - Dynamic request header generation
+    - Session management and cookie handling
+    - Intelligent retry logic with exponential backoff
+    - Request timing randomization
+    """
+    
+    def __init__(self):
+        self.session_cookies = {}
+        self.request_counts = {}
+        self.last_request_times = {}
+        
+        # Realistic user agent pool with corresponding headers
+        self.browser_profiles = [
+            {
+                'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'sec_ch_ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+                'sec_ch_ua_platform': '"Windows"',
+                'sec_ch_ua_mobile': '?0',
+            },
+            {
+                'user_agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'sec_ch_ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+                'sec_ch_ua_platform': '"macOS"',
+                'sec_ch_ua_mobile': '?0',
+            },
+            {
+                'user_agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15',
+                'sec_ch_ua': None,  # Safari doesn't send these headers
+                'sec_ch_ua_platform': None,
+                'sec_ch_ua_mobile': None,
+            },
+            {
+                'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/121.0',
+                'sec_ch_ua': None,  # Firefox doesn't send these headers
+                'sec_ch_ua_platform': None,
+                'sec_ch_ua_mobile': None,
+            }
+        ]
+    
+    def process_request(self, request, spider):
+        # Only apply to Bloomberg requests
+        if 'bloomberg.com' not in request.url:
+            return None
+        
+        # Select random browser profile
+        profile = random.choice(self.browser_profiles)
+        
+        # Set user agent
+        request.headers['User-Agent'] = profile['user_agent']
+        
+        # Add Chrome-specific headers if applicable
+        if profile['sec_ch_ua']:
+            request.headers['Sec-CH-UA'] = profile['sec_ch_ua']
+            request.headers['Sec-CH-UA-Platform'] = profile['sec_ch_ua_platform']
+            request.headers['Sec-CH-UA-Mobile'] = profile['sec_ch_ua_mobile']
+        
+        # Add realistic browser headers
+        request.headers.update({
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'Cache-Control': 'max-age=0',
+            'Upgrade-Insecure-Requests': '1',
+            'Sec-Fetch-Dest': 'document',
+            'Sec-Fetch-Mode': 'navigate',
+            'Sec-Fetch-Site': 'none',
+            'Sec-Fetch-User': '?1',
+        })
+        
+        # Add referer for internal navigation
+        if request.meta.get('is_internal_navigation'):
+            request.headers['Referer'] = 'https://www.bloomberg.com/'
+        
+        # Implement request throttling per domain
+        self._throttle_request(request, spider)
+        
+        return None
+    
+    def process_response(self, request, response, spider):
+        # Only process Bloomberg responses
+        if 'bloomberg.com' not in request.url:
+            return response
+        
+        # Store session cookies for future requests
+        if 'Set-Cookie' in response.headers:
+            domain = self._extract_domain(request.url)
+            if domain not in self.session_cookies:
+                self.session_cookies[domain] = {}
+            
+            # Simple cookie parsing (in production, use proper cookie jar)
+            cookies = response.headers.getlist('Set-Cookie')
+            for cookie in cookies:
+                cookie_str = cookie.decode('utf-8')
+                if '=' in cookie_str:
+                    name, value = cookie_str.split('=', 1)[0], cookie_str.split('=', 1)[1].split(';')[0]
+                    self.session_cookies[domain][name] = value
+        
+        # Handle different response scenarios
+        if response.status == 403:
+            logger.warning(f"Access denied for {request.url}. Implementing retry strategy.")
+            return self._handle_access_denied(request, response, spider)
+        
+        elif response.status == 429:
+            logger.warning(f"Rate limited for {request.url}. Implementing backoff.")
+            return self._handle_rate_limit(request, response, spider)
+        
+        elif response.status in [500, 502, 503, 504]:
+            logger.warning(f"Server error {response.status} for {request.url}")
+            return self._handle_server_error(request, response, spider)
+        
+        return response
+    
+    def _throttle_request(self, request, spider):
+        """Implement intelligent request throttling"""
+        import time
+        
+        domain = self._extract_domain(request.url)
+        current_time = time.time()
+        
+        # Track request counts per domain
+        if domain not in self.request_counts:
+            self.request_counts[domain] = 0
+        
+        self.request_counts[domain] += 1
+        
+        # Implement progressive delays based on request count
+        if self.request_counts[domain] > 20:
+            # After 20 requests, increase delay significantly
+            base_delay = 10
+        elif self.request_counts[domain] > 10:
+            # After 10 requests, moderate delay
+            base_delay = 7
+        else:
+            # First 10 requests, normal delay
+            base_delay = 5
+        
+        # Add randomization
+        delay = base_delay + random.uniform(1, 3)
+        
+        # Check if we need to wait based on last request
+        if domain in self.last_request_times:
+            time_since_last = current_time - self.last_request_times[domain]
+            if time_since_last < delay:
+                sleep_time = delay - time_since_last
+                logger.info(f"Throttling request to {domain}, sleeping {sleep_time:.2f} seconds")
+                time.sleep(sleep_time)
+        
+        self.last_request_times[domain] = time.time()
+    
+    def _handle_access_denied(self, request, response, spider):
+        """Handle 403 Access Denied responses"""
+        retry_times = request.meta.get('bloomberg_retry_times', 0)
+        
+        if retry_times < 3:
+            # Retry with different strategy
+            retry_request = request.copy()
+            retry_request.meta['bloomberg_retry_times'] = retry_times + 1
+            retry_request.meta['dont_filter'] = True
+            
+            # Wait longer before retry
+            delay = (2 ** retry_times) * 5  # Exponential backoff: 5, 10, 20 seconds
+            retry_request.meta['download_delay'] = delay
+            
+            logger.info(f"Retrying request to {request.url} in {delay} seconds (attempt {retry_times + 1})")
+            
+            # Change strategy for retry
+            if retry_times == 0:
+                # First retry: change user agent
+                profile = random.choice(self.browser_profiles)
+                retry_request.headers['User-Agent'] = profile['user_agent']
+            elif retry_times == 1:
+                # Second retry: try as mobile browser
+                retry_request.headers['User-Agent'] = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Mobile/15E148 Safari/604.1'
+                retry_request.headers['Sec-CH-UA-Mobile'] = '?1'
+            
+            return retry_request
+        
+        logger.error(f"Giving up on {request.url} after {retry_times} retries")
+        return response
+    
+    def _handle_rate_limit(self, request, response, spider):
+        """Handle 429 Rate Limited responses"""
+        retry_times = request.meta.get('bloomberg_rate_limit_retries', 0)
+        
+        if retry_times < 2:
+            retry_request = request.copy()
+            retry_request.meta['bloomberg_rate_limit_retries'] = retry_times + 1
+            retry_request.meta['dont_filter'] = True
+            
+            # Longer delay for rate limiting
+            delay = 30 + (retry_times * 30)  # 30, 60 seconds
+            retry_request.meta['download_delay'] = delay
+            
+            logger.warning(f"Rate limited. Retrying {request.url} in {delay} seconds")
+            return retry_request
+        
+        return response
+    
+    def _handle_server_error(self, request, response, spider):
+        """Handle server errors with exponential backoff"""
+        retry_times = request.meta.get('bloomberg_server_error_retries', 0)
+        
+        if retry_times < 2:
+            retry_request = request.copy()
+            retry_request.meta['bloomberg_server_error_retries'] = retry_times + 1
+            retry_request.meta['dont_filter'] = True
+            
+            delay = (2 ** retry_times) * 3  # 3, 6 seconds
+            retry_request.meta['download_delay'] = delay
+            
+            logger.warning(f"Server error {response.status}. Retrying {request.url} in {delay} seconds")
+            return retry_request
+        
+        return response
+    
+    def _extract_domain(self, url):
+        """Extract domain from URL"""
+        from urllib.parse import urlparse
+        return urlparse(url).netloc

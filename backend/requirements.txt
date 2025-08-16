@@ -10,6 +10,7 @@ psycopg2-binary==2.9.9
 asyncpg==0.29.0
 alembic==1.13.1
 redis==5.0.1
+supabase==2.3.4
 
 # Scraping
 scrapy==2.11.0

@@ -9,6 +9,7 @@ import logging
 from typing import Dict, Any
 from .adapters.base import DatabaseAdapter, DatabaseConfig
 from .adapters.postgresql_adapter import PostgreSQLAdapter
+from .adapters.supabase_adapter import SupabaseAdapter
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +20,7 @@ class DatabaseFactory:
     _adapters = {
         'postgresql': PostgreSQLAdapter,
         'timescale': PostgreSQLAdapter,  # TimescaleDB uses PostgreSQL adapter
-        # 'supabase': SupabaseAdapter,     # To be implemented
+        'supabase': SupabaseAdapter,     # Supabase adapter implemented
         # 'firebase': FirebaseAdapter,     # To be implemented
     }
     
@@ -76,10 +77,19 @@ def get_database_config_from_env() -> DatabaseConfig:
             'password': os.getenv('DATABASE_PASSWORD', ''),
         }
     elif adapter_type.lower() == 'supabase':
+        supabase_url = os.getenv('SUPABASE_URL')
+        supabase_anon_key = os.getenv('SUPABASE_ANON_KEY')
+        supabase_service_key = os.getenv('SUPABASE_SERVICE_KEY')
+        
+        if not supabase_url:
+            raise ValueError("SUPABASE_URL environment variable is required")
+        if not supabase_service_key:
+            raise ValueError("SUPABASE_SERVICE_KEY environment variable is required")
+        
         connection_params = {
-            'url': os.getenv('SUPABASE_URL'),
-            'key': os.getenv('SUPABASE_ANON_KEY'),
-            'service_key': os.getenv('SUPABASE_SERVICE_KEY'),
+            'url': supabase_url,
+            'anon_key': supabase_anon_key,
+            'service_key': supabase_service_key,
         }
     elif adapter_type.lower() == 'firebase':
         connection_params = {
